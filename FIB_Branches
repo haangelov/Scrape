@@ -1,0 +1,81 @@
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from bs4 import BeautifulSoup
+import pandas as pd
+ 
+# Prepare Selenium
+chrome_options = Options()
+chrome_options.add_argument("--headless")
+service = Service(r'C:\Program Files\GoogleDriver\chromedriver-win64\chromedriver.exe')
+driver = webdriver.Chrome(service=service, options=chrome_options)
+driver.get("https://my.fibank.bg/EBank/public/offices")
+
+# Wait for the page to load
+driver.implicitly_wait(10)
+
+# Extract HTML and parse with BeautifulSoup
+html = driver.page_source
+soup = BeautifulSoup(html, 'html.parser')
+
+# Create empty lists for data
+office_names = []
+office_addresses = []
+office_phones = []
+saturday_hours = []
+sunday_hours = []
+
+# Extract information for offices
+offices = soup.find_all("div", class_="margin-16")
+for office in offices:
+    # Extract working hours for Saturday and Sunday
+    saturday_work_times = office.find(
+        "p", {"class": "ng-binding ng-scope", "bo-if": "worktime.satStartTime"}
+    )
+    sunday_work_times = office.find(
+        "p", {"class": "ng-binding ng-scope", "bo-if": "worktime.sunStartTime"}
+    )
+
+    # Only proceed if the office has available working hours on both Saturday and Sunday
+    if saturday_work_times and sunday_work_times:
+        # Extract office name
+        office_names.append(office.find("p", {"bo-bind": "item.name"}).text.strip())
+
+        # Extract office address
+        office_addresses.append(
+            office.find(
+                "p", {"class": "grey-txt s2 ellipsis-txt", "bo-bind": "item.address"}
+            ).text.strip()
+        )
+
+        # Extract office phone
+        office_phones.append(
+            office.find(
+                "p", {"class": "info-wrapper s2", "bo-bind": "item.phones[0].phone"}
+            ).text.strip()
+        )
+
+        # Append working hours for Saturday and Sunday
+        saturday_hours.append(
+            saturday_work_times.text.replace(" ", "").replace("\n", " ")
+        )
+        sunday_hours.append(sunday_work_times.text.replace(" ", "").replace("\n", " "))
+
+# Close the browser
+driver.quit()
+
+# Create a DataFrame from extracted data
+data = {
+    'Име на офис': office_names,
+    'Адрес': office_addresses,
+    'Телефон': office_phones,
+    'Раб.време събота': saturday_hours,
+    'Раб.време неделя': sunday_hours
+}
+
+df = pd.DataFrame(data)
+
+# Save DataFrame to Excel file
+file_path = r'C:\PythonApp\fibank_branches.xlsx'
+df.to_excel(file_path, index=False, engine='openpyxl')
